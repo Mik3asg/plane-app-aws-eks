@@ -91,8 +91,199 @@ docs/
 ## Current status (last updated: 2026-03-28)
 - Bootstrap applied ✅ — S3 state bucket created
 - Infrastructure applied ✅ — VPC, EKS, DNS, IRSA, ECR all live in AWS
-- IRSA role ARNs + ECR URLs filled into K8s manifests ✅
-- **Next:** fill remaining 3 placeholders (GitHub org, email, Grafana password), bootstrap ArgoCD, push Docker images
+- All placeholders filled in K8s manifests ✅
+- Cloudflare NS records added for `labs.virtualscale.dev` delegation ✅
+- ArgoCD installed and all Applications applied ✅
+- EBS CSI driver installed ✅ (unblocks monitoring PVC provisioning)
+- external-dns chart switched from Bitnami → kubernetes-sigs ✅
+- Docker Desktop launched and verified ✅
+- `package-lock.json` generated for frontend and backend ✅ (unblocks Docker builds)
+- **Pending:** Docker images not yet pushed to ECR (build ready to run)
+- **Pending:** git push to GitHub (ArgoCD cannot sync taskboard until repo is pushed)
+- **Pending:** GitHub Actions secrets not yet configured
+
+## Deployment steps log
+
+### Step 1 — Connect kubectl to EKS
+```bash
+aws eks update-kubeconfig --region eu-west-2 --name plane-app-eks-prod
+kubectl get nodes   # verify 1 node in Ready state
+```
+
+### Step 2 — Install ArgoCD
+```bash
+kubectl create namespace argocd
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=180s
+```
+
+### Step 3 — Apply ArgoCD Applications + ClusterIssuer
+```bash
+kubectl apply -f kubernetes/argocd/apps/
+kubectl apply -f kubernetes/certmanager/cluster-issuer.yaml
+```
+This triggers ArgoCD to deploy: ingress-nginx, cert-manager, external-dns, taskboard, monitoring.
+
+### Step 4 — Install EBS CSI driver (done after monitoring pods were stuck Pending)
+```bash
+aws iam attach-role-policy \
+  --role-name plane-app-eks-prod-eks-node-role \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy \
+  --region eu-west-2
+
+aws eks create-addon \
+  --cluster-name plane-app-eks-prod \
+  --addon-name aws-ebs-csi-driver \
+  --region eu-west-2
+```
+
+### Step 5 — Generate package-lock.json files (required for Docker builds)
+The `npm ci` command used in the Dockerfiles requires lock files to be present. Run once locally before building images:
+```bash
+cd app/frontend && npm install && cd ../..
+cd app/backend  && npm install && cd ../..
+```
+Both `app/frontend/package-lock.json` and `app/backend/package-lock.json` must be committed to the repo so the Docker build context includes them.
+
+### Step 6 — Push Docker images to ECR
+Prerequisites: Docker Desktop running (`docker info` returns successfully), lock files generated (Step 5).
+```bash
+aws ecr get-login-password --region eu-west-2 | docker login --username AWS --password-stdin 207137402976.dkr.ecr.eu-west-2.amazonaws.com
+
+docker build -f docker/Dockerfile.frontend \
+  -t 207137402976.dkr.ecr.eu-west-2.amazonaws.com/plane-app-eks/plane-frontend:latest .
+docker push 207137402976.dkr.ecr.eu-west-2.amazonaws.com/plane-app-eks/plane-frontend:latest
+
+docker build -f docker/Dockerfile.backend \
+  -t 207137402976.dkr.ecr.eu-west-2.amazonaws.com/plane-app-eks/plane-backend:latest .
+docker push 207137402976.dkr.ecr.eu-west-2.amazonaws.com/plane-app-eks/plane-backend:latest
+```
+
+### Step 7 — Push code to GitHub
+```bash
+git add .
+git commit -m "feat: complete project setup with TaskBoard custom app"
+git push origin main
+```
+ArgoCD will auto-sync the taskboard namespace once the repo is pushed and ECR images are available.
+
+### Step 8 — Configure GitHub Actions secrets
+In the GitHub repo: Settings → Secrets and variables → Actions → New repository secret.
+
+| Secret name | Value |
+|---|---|
+| `AWS_TERRAFORM_ROLE_ARN` | IAM role ARN for GitHub OIDC (Terraform pipeline) |
+| `AWS_CICD_ROLE_ARN` | IAM role ARN for GitHub OIDC (app CI/CD pipeline) |
+| `ECR_REGISTRY` | `207137402976.dkr.ecr.eu-west-2.amazonaws.com` |
+| `ARGOCD_SERVER` | ArgoCD server hostname (get with `kubectl get svc -n argocd argocd-server`) |
+| `ARGOCD_TOKEN` | ArgoCD API token (Settings → Accounts → Generate token in ArgoCD UI) |
+
+### Step 9 — Verify end-to-end
+```bash
+# All pods healthy
+kubectl get pods -A
+
+# Cert issued
+kubectl get certificate -n taskboard
+
+# DNS resolves
+nslookup eks.labs.virtualscale.dev
+
+# App reachable
+curl -I https://eks.labs.virtualscale.dev
+```
+
+## Issues encountered and resolved
+
+### Issue 1 — monitoring pods stuck in Pending
+**Symptom:** All monitoring namespace pods (`prometheus`, `grafana`, `kube-state-metrics`, `node-exporter`) showed `Pending` status indefinitely after ArgoCD deployed the kube-prometheus-stack.
+
+**Root cause:** Prometheus requires a PersistentVolumeClaim (5Gi). EKS does not install the EBS CSI driver by default — without it there is no StorageClass capable of provisioning EBS volumes, so PVCs remain unbound and pods cannot be scheduled.
+
+**Fix:**
+```bash
+# Attach the required IAM policy to the node role
+aws iam attach-role-policy \
+  --role-name plane-app-eks-prod-eks-node-role \
+  --policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy \
+  --region eu-west-2
+
+# Install the EBS CSI driver as a managed EKS add-on
+aws eks create-addon \
+  --cluster-name plane-app-eks-prod \
+  --addon-name aws-ebs-csi-driver \
+  --region eu-west-2
+```
+
+**Prevention:** Add `aws_eks_addon` resource for `aws-ebs-csi-driver` to the EKS Terraform module so it is provisioned automatically on future clusters.
+
+---
+
+### Issue 2 — external-dns pod in ImagePullBackOff
+**Symptom:** `external-dns` pod stuck in `ImagePullBackOff`. Event log showed:
+```
+Back-off pulling image "docker.io/bitnami/external-dns:0.14.0-debian-12-r16"
+```
+
+**Root cause:** The Bitnami Helm chart pulls images from Docker Hub (`docker.io/bitnami/...`). Docker Hub enforces rate limits on anonymous pulls from shared IPs (common on cloud VMs/EKS nodes). The pull was being throttled and eventually timing out.
+
+**Fix:** Switched the ArgoCD Application from the Bitnami chart to the official `kubernetes-sigs/external-dns` chart, which pulls images from a registry without rate limits:
+```yaml
+repoURL: https://kubernetes-sigs.github.io/external-dns/
+chart: external-dns
+targetRevision: 1.14.5
+```
+Then re-applied: `kubectl apply -f kubernetes/argocd/apps/external-dns.yaml`
+
+**Prevention:** Prefer `kubernetes-sigs` or public ECR (`public.ecr.aws`) hosted charts over Bitnami for EKS workloads to avoid Docker Hub rate limiting.
+
+---
+
+### Issue 3 — taskboard namespace empty (no pods)
+**Symptom:** ArgoCD showed taskboard as `Synced / Healthy` but `kubectl get pods -n taskboard` returned `No resources found`.
+
+**Root cause:** Two sub-causes:
+1. The Git repo (`https://github.com/Mik3asg/plane-app-aws-eks`) had not been pushed — ArgoCD pointed at a remote repo that didn't contain the manifests yet.
+2. The ECR images (`plane-frontend:latest`, `plane-backend:latest`) had not been built and pushed — even once the manifests are applied, pods would enter `ImagePullBackOff`.
+
+**Fix (in progress):**
+1. Push the repo: `git push origin main`
+2. Build and push Docker images to ECR (blocked by Docker Desktop not running — see Issue 4)
+
+---
+
+### Issue 4 — Docker build failing (Docker Desktop not running)
+**Symptom:** Running `docker build` returned:
+```
+ERROR: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.
+```
+
+**Root cause:** Docker Desktop was not started on the Windows machine. The Docker CLI could not connect to the Linux engine daemon (`dockerDesktopLinuxEngine` named pipe).
+
+**Fix:** Launch Docker Desktop from the Start menu. Wait for the whale icon in the system tray to stop animating (fully started), then open a new terminal and retry. Verify with `docker info` before building.
+
+**Prevention:** Always verify `docker info` returns successfully before running build commands.
+
+---
+
+### Issue 5 — Docker build failing (missing package-lock.json)
+**Symptom:** Docker build failed during `npm ci` with:
+```
+npm error The `npm ci` command can only install with an existing package-lock.json or
+npm error npm-shrinkwrap.json with lockfileVersion >= 1.
+```
+
+**Root cause:** `npm ci` (used in the Dockerfiles for reproducible installs) requires a `package-lock.json` to exist. The lock files for `app/frontend` and `app/backend` had not been generated — only `package.json` was committed.
+
+**Fix:** Run `npm install` locally in each app directory to generate the lock files, then commit them:
+```bash
+cd app/frontend && npm install && cd ../..
+cd app/backend  && npm install && cd ../..
+git add app/frontend/package-lock.json app/backend/package-lock.json
+git commit -m "chore: add package-lock.json for frontend and backend"
+```
+
+**Prevention:** Always run `npm install` and commit the resulting `package-lock.json` whenever a new `package.json` is created. The Dockerfile should use `npm ci` (not `npm install`) for deterministic, CI-safe dependency installs.
 
 ## Terraform apply — outputs and what was done with them
 

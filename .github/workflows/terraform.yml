@@ -56,6 +56,13 @@ jobs:
           directory: terraform/bootstrap
           framework: terraform
           soft_fail: false
+          # Checks skipped for self-training project — all documented with reason:
+          # CKV_AWS_144: cross-region replication (overkill for state bucket)
+          # CKV2_AWS_62: S3 event notifications (not needed)
+          # CKV_AWS_18:  S3 access logging (unnecessary cost)
+          # CKV_AWS_145: KMS encryption (AES256 sufficient)
+          # CKV2_AWS_61: S3 lifecycle policy (state files have no expiry requirement)
+          skip_check: CKV_AWS_144,CKV2_AWS_62,CKV_AWS_18,CKV_AWS_145,CKV2_AWS_61
 
   # ── Infrastructure ─────────────────────────────────────────────────────────
   infrastructure:
@@ -89,6 +96,22 @@ jobs:
           directory: terraform/infrastructure
           framework: terraform
           soft_fail: false
+          # Checks skipped for self-training project — all documented with reason:
+          # CKV_AWS_274:  GitHub Terraform role uses AdministratorAccess (acceptable for self-training)
+          # CKV_AWS_51:   ECR MUTABLE tags required — CI pipeline pushes :latest
+          # CKV_AWS_136:  ECR KMS encryption (AES256 sufficient for self-training)
+          # CKV_AWS_382:  SG egress 0.0.0.0/0 required for EKS nodes to reach AWS APIs
+          # CKV_AWS_39:   EKS public endpoint needed for kubectl access from laptop/CI
+          # CKV_AWS_38:   EKS public endpoint IP restriction (open access needed for self-training)
+          # CKV_AWS_37:   EKS logs api/audit/authenticator — scheduler/controllerManager omitted (cost)
+          # CKV_AWS_58:   EKS secrets encryption with KMS (adds cost, overkill here)
+          # CKV_AWS_130:  Public subnets auto-assign IP required for NLB
+          # CKV2_AWS_5:   False positive — nodes SG attached via node group, not direct reference
+          # CKV2_AWS_12:  Default VPC SG restriction (not needed for self-training)
+          # CKV2_AWS_11:  VPC flow logging (adds cost)
+          # CKV2_AWS_38:  Route53 DNSSEC (unnecessary for self-training)
+          # CKV2_AWS_39:  Route53 DNS query logging (adds cost)
+          skip_check: CKV_AWS_274,CKV_AWS_51,CKV_AWS_136,CKV_AWS_382,CKV_AWS_39,CKV_AWS_38,CKV_AWS_37,CKV_AWS_58,CKV_AWS_130,CKV2_AWS_5,CKV2_AWS_12,CKV2_AWS_11,CKV2_AWS_38,CKV2_AWS_39
 
       - name: Terraform Init
         run: terraform init

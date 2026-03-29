@@ -39,10 +39,10 @@ jobs:
 
       # Multi-stage build — context is repo root so Dockerfile can reach app/
       - name: Build frontend image
-        run: docker build -f docker/Dockerfile.frontend -t $ECR_REGISTRY/plane-app-eks/plane-frontend:$IMAGE_TAG -t $ECR_REGISTRY/plane-app-eks/plane-frontend:latest .
+        run: docker build -f docker/Dockerfile.frontend -t ${{ env.ECR_REGISTRY }}/plane-app-eks/plane-frontend:${{ env.IMAGE_TAG }} -t ${{ env.ECR_REGISTRY }}/plane-app-eks/plane-frontend:latest .
 
       - name: Build backend image
-        run: docker build -f docker/Dockerfile.backend -t $ECR_REGISTRY/plane-app-eks/plane-backend:$IMAGE_TAG -t $ECR_REGISTRY/plane-app-eks/plane-backend:latest .
+        run: docker build -f docker/Dockerfile.backend -t ${{ env.ECR_REGISTRY }}/plane-app-eks/plane-backend:${{ env.IMAGE_TAG }} -t ${{ env.ECR_REGISTRY }}/plane-app-eks/plane-backend:latest .
 
       # Trivy scans images for CVEs before they reach ECR
       - name: Trivy scan — frontend
@@ -63,10 +63,10 @@ jobs:
 
       - name: Push images to ECR
         run: |
-          docker push $ECR_REGISTRY/plane-app-eks/plane-frontend:$IMAGE_TAG
-          docker push $ECR_REGISTRY/plane-app-eks/plane-frontend:latest
-          docker push $ECR_REGISTRY/plane-app-eks/plane-backend:$IMAGE_TAG
-          docker push $ECR_REGISTRY/plane-app-eks/plane-backend:latest
+          docker push ${{ env.ECR_REGISTRY }}/plane-app-eks/plane-frontend:${{ env.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/plane-app-eks/plane-frontend:latest
+          docker push ${{ env.ECR_REGISTRY }}/plane-app-eks/plane-backend:${{ env.IMAGE_TAG }}
+          docker push ${{ env.ECR_REGISTRY }}/plane-app-eks/plane-backend:latest
 
   # ── Deploy: update manifests + trigger ArgoCD sync ─────────────────────────
   deploy:

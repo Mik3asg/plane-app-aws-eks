@@ -1,5 +1,7 @@
 # Single-stage Node.js image — production dependencies only
 FROM node:20-alpine
+# Upgrade all packages to pick up security patches
+RUN apk upgrade --no-cache
 WORKDIR /app
 
 # Install prod dependencies (separate layer for Docker cache efficiency)

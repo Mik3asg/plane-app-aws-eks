@@ -88,7 +88,7 @@ docs/
 | 5  | Monitoring: Prometheus + Grafana (kube-prometheus-stack Helm chart + dashboards) | ✅ complete |
 | 6  | Architecture diagram (Mermaid — `docs/architecture.md`) | ✅ complete |
 
-## Current status (last updated: 2026-03-28)
+## Current status (last updated: 2026-03-29)
 - Bootstrap applied ✅ — S3 state bucket created
 - Infrastructure applied ✅ — VPC, EKS, DNS, IRSA, ECR all live in AWS
 - All placeholders filled in K8s manifests ✅
@@ -109,6 +109,7 @@ docs/
 - TLS certificate issued by Let's Encrypt ✅
 - DNS record created by ExternalDNS in Route53 ✅
 - **App live at https://eks.labs.virtualscale.dev** ✅
+- App CI/CD pipeline passing end-to-end ✅ (build → Trivy scan → ECR push → ArgoCD deploy)
 
 ## Deployment steps log
 

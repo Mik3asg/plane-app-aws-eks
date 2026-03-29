@@ -4,7 +4,7 @@ variable "aws_region" {
   default     = "eu-west-2"
 }
 
-variable "project_name" { 
+variable "project_name" {
   description = "Project name"
   type        = string
   default     = "plane-app-eks"

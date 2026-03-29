@@ -12,7 +12,7 @@ spec:
       restartPolicy: OnFailure
       containers:
         - name: migrate
-          image: 207137402976.dkr.ecr.eu-west-2.amazonaws.com/plane-app-eks/plane-backend:06fd47a3ea330908a18ff3ba1766e21312388caf
+          image: 207137402976.dkr.ecr.eu-west-2.amazonaws.com/plane-app-eks/plane-backend:8f4ff8b1fb34925fcab976f05e19ae7ce7a2b8af
           command: ["node", "src/migrate.js"]
           env:
             - name: POSTGRES_PASSWORD

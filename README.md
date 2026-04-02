@@ -2,7 +2,9 @@
 
 Production-grade DevOps project: deploy a secure cloud-native task manager (TaskBoard) on Amazon EKS using Terraform IaC, ArgoCD GitOps, GitHub Actions CI/CD, Helm, cert-manager TLS, ExternalDNS, and Prometheus + Grafana monitoring.
 
-**Live:** https://eks.labs.virtualscale.dev | **Region:** eu-west-2 | **EKS:** 1.32
+**URL (when deployed):** https://eks.labs.virtualscale.dev | **Region:** eu-west-2 | **EKS:** 1.32
+
+![TaskBoard](docs/taskboard-app-eks.png)
 
 ---
 
@@ -299,8 +301,24 @@ TaskBoard: create, complete, and delete tasks.
 | Database | PostgreSQL 15 | 5432 |
 | Cache | Redis 7 (60s TTL) | 6379 |
 
+### Run locally
+
+Requirements: Docker Desktop running.
+
 ```bash
-docker compose up --build   # http://localhost:3000
+# First time only — generate lock files
+cd app/frontend && npm install && cd ../..
+cd app/backend  && npm install && cd ../..
+
+# Start all services
+docker compose up --build
+```
+
+Open http://localhost:3000. The backend API is available at http://localhost:8000/api/tasks.
+
+To stop:
+```bash
+docker compose down
 ```
 
 ---

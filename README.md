@@ -12,6 +12,7 @@ Production-grade DevOps project: deploy a secure cloud-native task manager (Task
 
 - [taskboard-app-eks](#taskboard-app-eks)
   - [Table of contents](#table-of-contents)
+  - [Run locally](#run-locally)
   - [1. Stack](#1-stack)
   - [2. Key components](#2-key-components)
   - [3. Architecture](#3-architecture)
@@ -36,6 +37,30 @@ Production-grade DevOps project: deploy a secure cloud-native task manager (Task
   - [12. Challenges and fixes](#12-challenges-and-fixes)
   - [13. Cost](#13-cost)
   - [14. Teardown](#14-teardown)
+
+---
+
+## Run locally
+
+**Prerequisites:**
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
+- [Node.js](https://nodejs.org/) >= 18 (only needed the first time to generate lock files)
+- Git
+
+```bash
+# First time only — generate lock files
+cd app/frontend && npm install && cd ../..
+cd app/backend  && npm install && cd ../..
+
+# Start all services
+docker compose up --build
+```
+
+Open http://localhost:3000. API at http://localhost:8000/api/tasks.
+
+```bash
+docker compose down   # stop
+```
 
 ---
 
@@ -301,25 +326,6 @@ TaskBoard: create, complete, and delete tasks.
 | Database | PostgreSQL 15 | 5432 |
 | Cache | Redis 7 (60s TTL) | 6379 |
 
-### Run locally
-
-Requirements: Docker Desktop running.
-
-```bash
-# First time only — generate lock files
-cd app/frontend && npm install && cd ../..
-cd app/backend  && npm install && cd ../..
-
-# Start all services
-docker compose up --build
-```
-
-Open http://localhost:3000. The backend API is available at http://localhost:8000/api/tasks.
-
-To stop:
-```bash
-docker compose down
-```
 
 ---
 

@@ -482,15 +482,28 @@ aws ec2 delete-security-group --group-id <sg-id> --region eu-west-2
 ```
 
 **6. Destroy bootstrap**
+
+`prevent_destroy = true` is set on the S3 bucket. Comment it out in `terraform/bootstrap/main.tf` before destroying:
+
+```hcl
+# lifecycle {
+#   prevent_destroy = true
+# }
+```
+
+If the bucket has versioned objects, delete them first (skip if bucket is empty):
 ```bash
-# Delete all S3 object versions first (versioning is enabled)
+aws s3 rm s3://taskboard-app-eks-terraform-state --recursive
 aws s3api delete-objects \
   --bucket taskboard-app-eks-terraform-state \
   --delete "$(aws s3api list-object-versions \
     --bucket taskboard-app-eks-terraform-state \
     --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' \
-    --output json)"
+    --output json)" 2>/dev/null || true
+```
 
+Then destroy:
+```bash
 cd terraform/bootstrap && terraform destroy
 ```
 

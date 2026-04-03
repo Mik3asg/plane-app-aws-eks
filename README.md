@@ -491,15 +491,24 @@ aws ec2 delete-security-group --group-id <sg-id> --region eu-west-2
 # }
 ```
 
-If the bucket has versioned objects, delete them first (skip if bucket is empty):
+Clear the bucket before destroying (versioning is enabled — both versions and delete markers must be removed):
+
 ```bash
-aws s3 rm s3://taskboard-app-eks-terraform-state --recursive
+# Delete all versions (skip if output is None — bucket has no versions)
 aws s3api delete-objects \
   --bucket taskboard-app-eks-terraform-state \
   --delete "$(aws s3api list-object-versions \
     --bucket taskboard-app-eks-terraform-state \
     --query '{Objects: Versions[].{Key:Key,VersionId:VersionId}}' \
-    --output json)" 2>/dev/null || true
+    --output json)"
+
+# Delete all delete markers
+aws s3api delete-objects \
+  --bucket taskboard-app-eks-terraform-state \
+  --delete "$(aws s3api list-object-versions \
+    --bucket taskboard-app-eks-terraform-state \
+    --query '{Objects: DeleteMarkers[].{Key:Key,VersionId:VersionId}}' \
+    --output json)"
 ```
 
 Then destroy:
